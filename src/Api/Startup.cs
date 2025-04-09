@@ -105,7 +105,14 @@ namespace DefiPortfolioManager.Api
             services.AddSingleton<IBlockchainService>(provider =>
             {
                 return new EthereumBlockchainService(
-                    provider.GetRequiredService<IPriceService>());
+                    provider.GetRequiredService<IPriceService>(),
+                    provider.GetRequiredService<IOptions<AppSettings>>());
+            });
+            
+            // Register services as IEnumerable for multi-blockchain support
+            services.AddSingleton<IEnumerable<IBlockchainService>>(provider =>
+            {
+                return new List<IBlockchainService> { provider.GetRequiredService<IBlockchainService>() };
             });
             
             // Register yield service

@@ -5,6 +5,7 @@ namespace DefiPortfolioManager.Core.Settings
         public CacheSettings Cache { get; set; } = new CacheSettings();
         public ExternalApiSettings ExternalApis { get; set; } = new ExternalApiSettings();
         public RedisSettings Redis { get; set; } = new RedisSettings();
+        public BlockchainSettings Blockchain { get; set; } = new BlockchainSettings();
     }
 
     public class CacheSettings
@@ -28,5 +29,11 @@ namespace DefiPortfolioManager.Core.Settings
         public string ConnectionString { get; set; } = "localhost:6379";
         public string InstanceName { get; set; } = "DefiPortfolioManager:";
         public int DatabaseId { get; set; } = 0;
+    }
+
+    public class BlockchainSettings
+    {
+        public string EthereumRpcUrl { get; set; } = "https://mainnet.infura.io/v3/YourInfuraApiKey";
+        public string EtherscanApiKey { get; set; } = "YourEtherscanApiKey";
     }
 }
