@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5001:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - defi-network
+
+  frontend:
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - defi-network
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - defi-network
+
+networks:
+  defi-network:
+    driver: bridge
+
+volumes:
+  redis-data: 
