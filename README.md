@@ -1,32 +1,59 @@
 # DeFi Portfolio Manager
 
-Multi-Chain | Yield Tracker | C# Backend | React Frontend
+<div align="center">
+  <h3>Multi-Chain | Yield Tracker | C# Backend | React Frontend</h3>
+  <p>
+    <b>A comprehensive DeFi portfolio tracking platform for modern crypto investors</b>
+  </p>
+  
+  <p>
+    <a href="#demo">View Demo</a>
+    ·
+    <a href="#installation">Installation</a>
+    ·
+    <a href="#usage">Usage</a>
+    ·
+    <a href="https://github.com/Dipraise1/DeFi-Portfolio-Manager-cHASH/issues">Report Bug</a>
+  </p>
+</div>
 
 ## Overview
 
-DeFi Portfolio Manager is a comprehensive platform that allows users to view, track, and analyze their crypto assets across multiple blockchains (Ethereum, Polygon, BNB Chain, etc.). The platform displays token balances, current token values (in USD), and real-time yield/APR from popular LPs (liquidity pools) and vaults.
+DeFi Portfolio Manager is a robust application designed to help users track and analyze their crypto assets across multiple blockchains. Leveraging a modular C# backend with a React frontend, the platform provides real-time data on token balances, current valuations, and yield metrics from various DeFi protocols.
+
+### Key Capabilities
+
+- **Portfolio Tracking**: Aggregate all your crypto assets across multiple chains in one dashboard
+- **Yield Monitoring**: Track APY/APR from various protocols and liquidity pools  
+- **Performance Analytics**: View historical performance data and projected returns
+- **Multi-Chain Support**: Track assets across Ethereum, Polygon, BSC and more
+
+<div align="center">
+  <p><i>Dashboard showing portfolio performance and yield positions</i></p>
+</div>
 
 ## Core Features
 
-- 🔗 Multi-Chain Support (Ethereum, Polygon, BSC, etc.)
-- 👛 Wallet Connect (MetaMask/WalletConnect)
-- 📊 Token Balance Tracker (ERC-20s & native coins)
-- 💹 Yield/APR Display from LPs and vaults
-- 💱 Token Price Conversion (USD, EUR, etc.)
-- 📈 Performance Insights (total value, ROI, projected yields)
-- 🔒 Local Portfolio Caching + Secure Session Storage
+- 🔗 **Multi-Chain Support** - Ethereum, Polygon, BSC, and more
+- 👛 **Wallet Connect Integration** - Seamless login with MetaMask/WalletConnect
+- 📊 **Token Balance Tracker** - ERC-20s & native coins with real-time valuations
+- 💹 **Yield/APR Display** - Current and historical yield from DeFi positions
+- 💱 **Token Price Conversion** - USD, EUR, and other fiat currencies
+- 📈 **Performance Insights** - Total value, ROI, and projected yields
+- 🔒 **Secure Caching** - Redis-powered caching with configurable expiry
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React.js with Chart.js |
-| Backend | C# / ASP.NET Core |
+| Layer | Technologies |
+|-------|-------------|
+| Frontend | React.js, Chart.js, Web3 React |
+| Backend | C# / ASP.NET Core 6.0 |
 | Blockchain | Nethereum, Web3 APIs |
-| Price Feeds | CoinGecko API / Chainlink / 1inch API |
+| Price Feeds | CoinGecko API, Chainlink, 1inch API |
 | DeFi Protocols | Aave, Uniswap, Yearn, Beefy, etc. |
 | Wallet Auth | MetaMask / WalletConnect + SIWE |
-| Storage | Redis (for caching) |
+| Caching | Redis (production), In-memory (development) |
+| Deployment | Docker, Docker Compose, Nginx, Certbot |
 
 ## Project Structure
 
@@ -35,30 +62,32 @@ DefiPortfolioManager/
 ├── src/
 │   ├── Api/               # ASP.NET Core Web API
 │   ├── Core/              # Domain models, interfaces, business logic
-│   ├── Infrastructure/    # External services implementation, DB context
+│   ├── Infrastructure/    # External service implementations, DB context
 │   └── Services/          # Application services, business logic implementation
 ├── tests/                 # Unit and integration tests
-└── ClientApp/             # React frontend application
+├── ClientApp/             # React frontend application
+├── docker-compose.yml     # Development Docker configuration
+└── docker-compose.prod.yml # Production Docker configuration
 ```
 
-## Local Development Setup
+## Installation
 
 ### Prerequisites
 
 - .NET 6.0 SDK or later
-- Node.js 16 or later & npm
+- Node.js 16+ and npm
 - Docker and Docker Compose
 - Git
 
-### Running Locally with Docker
+### Quick Start (Docker)
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/defi-portfolio-manager.git
-   cd defi-portfolio-manager
+   git clone https://github.com/Dipraise1/DeFi-Portfolio-Manager-cHASH.git
+   cd DeFi-Portfolio-Manager-cHASH
    ```
 
-2. Run the application using Docker Compose:
+2. Run the application with Docker Compose:
    ```bash
    docker-compose up -d
    ```
@@ -68,9 +97,9 @@ DefiPortfolioManager/
    - API: http://localhost:5001/api
    - Swagger UI: http://localhost:5001/swagger
 
-### Running Locally Without Docker
+### Manual Setup
 
-1. Start Redis (required for caching):
+1. Start Redis for caching:
    ```bash
    docker run -d -p 6379:6379 redis:alpine
    ```
@@ -92,61 +121,71 @@ DefiPortfolioManager/
 
 ## Production Deployment
 
-### Deploying to a VPS or Cloud Server
+### One-Command Deployment
 
-1. Provision a server with Docker and Docker Compose installed
-2. Clone the repository to your server
-3. Set up environment variables:
-   ```bash
-   export REDIS_PASSWORD=your_secure_password
-   ```
+Use our deployment script for a fully automated setup:
 
-4. Run the deployment script with your domain:
-   ```bash
-   ./deploy.sh yourdomain.com your@email.com
-   ```
+```bash
+./deploy.sh yourdomain.com your@email.com
+```
 
-### Manual Deployment Steps
+This will:
+- Configure Nginx for your domain
+- Obtain SSL certificates using Certbot
+- Start all services in a secure Docker environment
+- Make your application accessible via HTTPS
 
-If you prefer to deploy manually:
+### Manual Deployment
 
-1. Configure your domain in `nginx/conf/app.conf`
+For manual deployment, use the production Docker Compose file:
 
-2. Create the necessary directories:
-   ```bash
-   mkdir -p nginx/certbot/conf nginx/certbot/www
-   ```
+```bash
+# Configure environment variables
+cp .env.example .env
+nano .env  # Edit with your settings
 
-3. Deploy using the production compose file:
-   ```bash
-   docker-compose -f docker-compose.prod.yml up -d
-   ```
+# Deploy the application
+docker-compose -f docker-compose.prod.yml up -d
+```
 
-## Maintenance
+## API Endpoints
 
-- SSL certificates are auto-renewed by Certbot
-- To update the application:
-  ```bash
-  git pull
-  docker-compose -f docker-compose.prod.yml build
-  docker-compose -f docker-compose.prod.yml up -d
-  ```
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/health` | Health check for API services |
+| `GET /api/blockchain/supported` | List supported blockchains |
+| `GET /api/portfolio/{address}` | Get portfolio for a wallet address |
+| `GET /api/yield/protocols` | List supported yield protocols |
+
+Complete API documentation is available via Swagger UI when running the application.
 
 ## Caching Strategy
 
-The application implements a flexible caching strategy to improve performance:
+The application implements a sophisticated caching strategy:
 
-- **Memory Cache**: For development and testing
-- **Redis Cache**: For production
-- **Configurable Expiry**: Different cache expiry times for different data types:
-  - Price data: Short expiry (1-5 minutes)
-  - Token list data: Longer expiry (12-48 hours)
-  - Portfolio data: Medium expiry (5-10 minutes)
+- **Memory Cache**: Used in development for quick iterations
+- **Redis Cache**: Used in production for distributed caching
+- **Tiered Expiration**: Configurable expiry times based on data type:
+  - Price data: 1-5 minutes (frequently changing)
+  - Token list data: 12-48 hours (relatively static)
+  - Portfolio data: 5-10 minutes (balance between performance and accuracy)
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. # DeFi-Portfolio-Manager-cHASH
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgements
+
+- [CoinGecko API](https://www.coingecko.com/en/api) for token pricing data
+- [Nethereum](https://nethereum.com/) for Ethereum integration
+- [ASP.NET Core](https://docs.microsoft.com/en-us/aspnet/core) for backend framework
