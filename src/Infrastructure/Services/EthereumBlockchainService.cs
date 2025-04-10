@@ -6,13 +6,17 @@ using System.Threading.Tasks;
 using DefiPortfolioManager.Core.Interfaces;
 using DefiPortfolioManager.Core.Models;
 using DefiPortfolioManager.Core.Settings;
+using DefiPortfolioManager.Core.Utils;
+using DefiPortfolioManager.Core.Exceptions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 using Nethereum.Hex.HexTypes;
 using Nethereum.Util;
 using Nethereum.Contracts;
 using Nethereum.ABI.FunctionEncoding.Attributes;
+using System.Net.Http;
 
 namespace DefiPortfolioManager.Infrastructure.Services
 {
@@ -25,6 +29,8 @@ namespace DefiPortfolioManager.Infrastructure.Services
         private readonly Blockchain _blockchain;
         private readonly Web3 _web3;
         private readonly AppSettings _settings;
+        private readonly RateLimiter _rateLimiter;
+        private readonly ILogger<EthereumBlockchainService> _logger;
         
         // Standard ERC20 ABI elements for common operations
         private const string ERC20ABI = @"[
@@ -37,10 +43,14 @@ namespace DefiPortfolioManager.Infrastructure.Services
         /// <summary>
         /// Creates a new Ethereum blockchain service
         /// </summary>
-        public EthereumBlockchainService(IPriceService priceService, IOptions<AppSettings> options)
+        public EthereumBlockchainService(
+            IPriceService priceService, 
+            IOptions<AppSettings> options,
+            ILogger<EthereumBlockchainService> logger = null)
         {
             _priceService = priceService ?? throw new ArgumentNullException(nameof(priceService));
             _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _logger = logger;
             
             _blockchain = new Blockchain(BlockchainType.Ethereum, "Ethereum", 1, "ETH", "Ethereum", 18)
             {
@@ -53,6 +63,16 @@ namespace DefiPortfolioManager.Infrastructure.Services
             
             // Initialize Web3 with the configured RPC URL
             _web3 = new Web3(_settings.Blockchain.EthereumRpcUrl);
+            
+            // Initialize rate limiter
+            _rateLimiter = new RateLimiter();
+            
+            // Configure rate limits
+            _rateLimiter.Configure("infura", 5); // 5 requests per second for Infura
+            _rateLimiter.Configure("etherscan", 3); // 3 requests per second for Etherscan
+            
+            _logger?.LogInformation("EthereumBlockchainService initialized with RPC URL: {RpcUrl}", 
+                MaskApiKey(_settings.Blockchain.EthereumRpcUrl));
         }
         
         /// <summary>
@@ -78,14 +98,23 @@ namespace DefiPortfolioManager.Infrastructure.Services
                 
             try
             {
-                var balanceWei = await _web3.Eth.GetBalance.SendRequestAsync(walletAddress);
-                var balanceEth = Web3.Convert.FromWei(balanceWei.Value);
-                return (decimal)balanceEth;
+                _logger?.LogDebug("Getting ETH balance for wallet {Wallet}", walletAddress);
+                
+                return await _rateLimiter.ExecuteAsync("infura", async () =>
+                {
+                    var balanceWei = await _web3.Eth.GetBalance.SendRequestAsync(walletAddress);
+                    var balanceEth = Web3.Convert.FromWei(balanceWei.Value);
+                    
+                    _logger?.LogDebug("ETH balance for wallet {Wallet}: {Balance}", 
+                        walletAddress, balanceEth);
+                        
+                    return (decimal)balanceEth;
+                });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error getting ETH balance: {ex.Message}");
-                throw new Exception("Failed to get ETH balance", ex);
+                _logger?.LogError(ex, "Error getting ETH balance for wallet {Wallet}", walletAddress);
+                throw new BlockchainException("Failed to get ETH balance", ex);
             }
         }
 
@@ -102,19 +131,22 @@ namespace DefiPortfolioManager.Infrastructure.Services
                 
             try
             {
-                // Get the token contract
-                var contract = _web3.Eth.GetContract(ERC20ABI, tokenContractAddress);
-                
-                // Call balanceOf function
-                var balanceFunction = contract.GetFunction("balanceOf");
-                var balance = await balanceFunction.CallAsync<BigInteger>(walletAddress);
-                
-                // Get token decimals
-                var decimalsFunction = contract.GetFunction("decimals");
-                var decimals = await decimalsFunction.CallAsync<byte>();
-                
-                // Convert to decimal with proper decimal places
-                return (decimal)(balance / BigInteger.Pow(10, decimals));
+                return await _rateLimiter.ExecuteAsync("infura", async () =>
+                {
+                    // Get the token contract
+                    var contract = _web3.Eth.GetContract(ERC20ABI, tokenContractAddress);
+                    
+                    // Call balanceOf function
+                    var balanceFunction = contract.GetFunction("balanceOf");
+                    var balance = await balanceFunction.CallAsync<BigInteger>(walletAddress);
+                    
+                    // Get token decimals
+                    var decimalsFunction = contract.GetFunction("decimals");
+                    var decimals = await decimalsFunction.CallAsync<byte>();
+                    
+                    // Convert to decimal with proper decimal places
+                    return (decimal)(balance / BigInteger.Pow(10, decimals));
+                });
             }
             catch (Exception ex)
             {
@@ -131,70 +163,109 @@ namespace DefiPortfolioManager.Infrastructure.Services
             if (!IsValidAddress(walletAddress))
                 throw new ArgumentException("Invalid Ethereum address", nameof(walletAddress));
                 
-            // In a real implementation, this would use an Ethereum scanner API (like Etherscan)
-            // to get all token balances for a wallet
-            // Placeholder implementation
+            var result = new List<TokenBalance>();
             
-            Console.WriteLine($"Getting all token balances for wallet: {walletAddress}");
-            
-            // Simulate API call
-            await Task.Delay(500);
-            
-            // Create dummy token balances for demonstration
-            var ethToken = _blockchain.GetNativeToken();
-            ethToken.CurrentPriceUsd = await _priceService.GetTokenPriceAsync(ethToken.Symbol);
-            
-            var result = new List<TokenBalance>
+            try
             {
-                new TokenBalance(ethToken, walletAddress, 1.5m),
-                new TokenBalance(
-                    new Token("LINK", "Chainlink")
-                    {
-                        ContractAddress = "0x514910771af9ca656af840dff83e8264ecf986ca",
-                        Blockchain = _blockchain,
-                        Decimals = 18,
-                        LogoUrl = "https://cryptologos.cc/logos/chainlink-link-logo.png",
-                        CoingeckoId = "chainlink"
-                    }, 
-                    walletAddress, 
-                    25.0m
-                ),
-                new TokenBalance(
-                    new Token("USDT", "Tether")
-                    {
-                        ContractAddress = "0xdac17f958d2ee523a2206206994597c13d831ec7",
-                        Blockchain = _blockchain,
-                        Decimals = 6,
-                        LogoUrl = "https://cryptologos.cc/logos/tether-usdt-logo.png",
-                        CoingeckoId = "tether"
-                    }, 
-                    walletAddress, 
-                    500.0m
-                ),
-                new TokenBalance(
-                    new Token("USDC", "USD Coin")
-                    {
-                        ContractAddress = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        Blockchain = _blockchain,
-                        Decimals = 6,
-                        LogoUrl = "https://cryptologos.cc/logos/usd-coin-usdc-logo.png",
-                        CoingeckoId = "usd-coin"
-                    }, 
-                    walletAddress, 
-                    1000.0m
-                )
-            };
-            
-            // Update token prices
-            var tokens = result.Select(b => b.Token).ToList();
-            var prices = await _priceService.GetTokenPricesAsync(tokens);
-            
-            foreach (var balance in result)
-            {
-                if (prices.TryGetValue(balance.Token, out var price))
+                // First get the native ETH balance
+                var ethBalance = await GetNativeTokenBalanceAsync(walletAddress);
+                var ethToken = _blockchain.GetNativeToken();
+                
+                try
                 {
-                    balance.Token.CurrentPriceUsd = price;
+                    ethToken.CurrentPriceUsd = await _priceService.GetTokenPriceAsync(ethToken.Symbol);
                 }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not get ETH price: {ex.Message}");
+                }
+                
+                result.Add(new TokenBalance(ethToken, walletAddress, ethBalance));
+                
+                // Use Etherscan API to get ERC20 token balances
+                using var httpClient = new HttpClient();
+                string apiUrl = $"{_settings.ExternalApis.EtherscanBaseUrl}?module=account&action=tokentx&address={walletAddress}&sort=asc&apikey={_settings.Blockchain.EtherscanApiKey}";
+                
+                // Get token transfer history to identify tokens
+                var response = await httpClient.GetStringAsync(apiUrl);
+                
+                // We would normally use a proper JSON parser here
+                // For now, we'll extract the token contract addresses
+                var uniqueTokens = new HashSet<string>();
+                var tokenCache = new Dictionary<string, Token>();
+                
+                // Parse JSON response - this is a simplified approach
+                // In production, use a proper JSON library like Newtonsoft.Json or System.Text.Json
+                foreach (var line in response.Split('\n'))
+                {
+                    if (line.Contains("\"contractAddress\":"))
+                    {
+                        var start = line.IndexOf("\"") + 1;
+                        var end = line.IndexOf("\"", start);
+                        var contractAddress = line.Substring(start, end - start).Trim().ToLowerInvariant();
+                        
+                        if (!string.IsNullOrEmpty(contractAddress) && IsValidAddress(contractAddress))
+                        {
+                            uniqueTokens.Add(contractAddress);
+                        }
+                    }
+                }
+                
+                // Now get the balance for each token
+                foreach (var contractAddress in uniqueTokens)
+                {
+                    try
+                    {
+                        // Get token info first
+                        Token token;
+                        if (!tokenCache.TryGetValue(contractAddress, out token))
+                        {
+                            token = await GetTokenInfoAsync(contractAddress);
+                            tokenCache[contractAddress] = token;
+                        }
+                        
+                        // Get the balance
+                        var balance = await GetTokenBalanceAsync(walletAddress, contractAddress);
+                        
+                        // Only add if balance > 0
+                        if (balance > 0)
+                        {
+                            result.Add(new TokenBalance(token, walletAddress, balance));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error getting balance for token {contractAddress}: {ex.Message}");
+                        // Continue with other tokens even if one fails
+                    }
+                }
+                
+                // Update token prices in batches for better performance
+                var tokens = result.Select(b => b.Token).Where(t => t.CurrentPriceUsd <= 0).ToList();
+                if (tokens.Count > 0)
+                {
+                    try
+                    {
+                        var prices = await _priceService.GetTokenPricesAsync(tokens);
+                        
+                        foreach (var balance in result)
+                        {
+                            if (prices.TryGetValue(balance.Token, out var price) && balance.Token.CurrentPriceUsd <= 0)
+                            {
+                                balance.Token.CurrentPriceUsd = price;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Warning: Error getting token prices: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting all token balances: {ex.Message}");
+                throw new Exception("Failed to get all token balances", ex);
             }
             
             return result;
@@ -556,11 +627,105 @@ namespace DefiPortfolioManager.Infrastructure.Services
         }
         
         /// <summary>
+        /// Discovers ERC20 tokens held by a wallet address
+        /// </summary>
+        public async Task<List<string>> DiscoverTokensAsync(string walletAddress)
+        {
+            if (!IsValidAddress(walletAddress))
+                throw new ArgumentException("Invalid Ethereum address", nameof(walletAddress));
+            
+            try
+            {
+                return await _rateLimiter.ExecuteAsync("etherscan", async () =>
+                {
+                    using var httpClient = new HttpClient();
+                    string apiUrl = $"{_settings.ExternalApis.EtherscanBaseUrl}?module=account&action=tokentx&address={walletAddress}&sort=asc&apikey={_settings.Blockchain.EtherscanApiKey}";
+                    
+                    // Get token transfer history to identify tokens
+                    var response = await httpClient.GetStringAsync(apiUrl);
+                    
+                    // Extract token contract addresses
+                    var uniqueTokens = new HashSet<string>();
+                    
+                    // Simple JSON parsing approach
+                    // In production, use a proper JSON library
+                    foreach (var line in response.Split('\n'))
+                    {
+                        if (line.Contains("\"contractAddress\":"))
+                        {
+                            var parts = line.Split(new[] { "\"contractAddress\":" }, StringSplitOptions.None);
+                            if (parts.Length > 1)
+                            {
+                                var addressPart = parts[1].Trim();
+                                var start = addressPart.IndexOf("\"") + 1;
+                                var end = addressPart.IndexOf("\"", start);
+                                
+                                if (start >= 0 && end > start)
+                                {
+                                    var contractAddress = addressPart.Substring(start, end - start).Trim().ToLowerInvariant();
+                                    if (!string.IsNullOrEmpty(contractAddress) && IsValidAddress(contractAddress))
+                                    {
+                                        uniqueTokens.Add(contractAddress);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    return uniqueTokens.ToList();
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error discovering tokens: {ex.Message}");
+                throw new Exception("Failed to discover tokens", ex);
+            }
+        }
+        
+        /// <summary>
         /// Checks if a string contains only hexadecimal characters
         /// </summary>
         private bool IsHexString(string input)
         {
-            return input.All(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+            if (string.IsNullOrEmpty(input))
+                return false;
+                
+            foreach (char c in input)
+            {
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                    return false;
+            }
+            
+            return true;
+        }
+        
+        /// <summary>
+        /// Masks API keys in URLs or strings for secure logging
+        /// </summary>
+        private string MaskApiKey(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return input;
+            
+            // Check if it's an Infura URL
+            if (input.Contains("infura.io"))
+            {
+                var parts = input.Split('/');
+                if (parts.Length > 0)
+                {
+                    // Replace API key with masked version
+                    parts[parts.Length - 1] = "****" + parts[parts.Length - 1].Substring(Math.Min(4, parts[parts.Length - 1].Length));
+                    return string.Join("/", parts);
+                }
+            }
+            
+            // Handle other API keys
+            if (input.Length > 6)
+            {
+                return input.Substring(0, 4) + "****" + input.Substring(input.Length - 2);
+            }
+            
+            return "******";
         }
     }
 } 

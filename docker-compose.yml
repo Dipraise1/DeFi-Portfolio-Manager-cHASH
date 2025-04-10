@@ -10,6 +10,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
+      - AppSettings__Blockchain__EthereumRpcUrl=https://mainnet.infura.io/v3/${INFURA_API_KEY}
+      - AppSettings__Blockchain__EtherscanApiKey=${ETHERSCAN_API_KEY}
+      - AppSettings__Cache__UseRedisCache=true
+      - AppSettings__Redis__ConnectionString=redis:6379
     depends_on:
       - redis
     restart: unless-stopped

@@ -86,6 +86,9 @@ namespace DefiPortfolioManager.Api
                 return factory.CreateCacheService();
             });
 
+            // Register rate limiter
+            services.AddSingleton<DefiPortfolioManager.Core.Utils.RateLimiter>();
+
             // Register application services
             services.AddSingleton<IPriceService>(provider => 
             {
